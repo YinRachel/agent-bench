@@ -24,9 +24,20 @@ def main(argv: list[str] | None = None) -> int:
     ev.add_argument("--arms", default="baseline,skill", help="comma list from baseline,placebo,skill")
     ev.add_argument("--tasks", default="", help="comma-separated task names (default: all training tasks)")
     ev.add_argument("--limit", type=int, default=None, help="evaluate only the first N selected tasks")
+    ev.add_argument("--model", default=None,
+                    help="override only the learner model configured in hackathon.toml (graders unchanged)")
+    ev.add_argument("--learner-base-url", default=None,
+                    help="separate OpenAI-compatible learner endpoint, e.g. http://127.0.0.1:11434; graders unchanged")
+    ev.add_argument("--learner-key-env", default=None,
+                    help="environment variable holding the separate learner endpoint key (default: no authentication)")
     ev.add_argument("--concurrency", type=int, default=None,
                     help="parallel task containers (default: hackathon.toml; lower it on a laptop for qf/tau3)")
     ev.add_argument("--out", required=True)
+    ev.add_argument("--resume", action="store_true", help="reuse completed task/arm pairs in --out")
+    ev.add_argument("--learner-budget-tokens", type=int, default=None,
+                    help="learner token allowance for this invocation (including resumed work)")
+    ev.add_argument("--grader-budget-tokens", type=int, default=None,
+                    help="grader token allowance for this invocation (including resumed work)")
     ev.add_argument("--config", default=None, help="hackathon config (default: repo-root hackathon.toml)")
     ck = sub.add_parser("check-skill", help="static submission checks for a skill folder")
     ck.add_argument("skill")
@@ -75,7 +86,13 @@ def _run(args) -> int:
 
     base = os.environ.get("STBENCH_UPSTREAM_BASE_URL") or hcfg.upstream_base_url
     key = os.environ.get("STBENCH_UPSTREAM_KEY") or os.environ.get(hcfg.upstream_key_env)
-    if not key:
+    learner_base = args.learner_base_url or hcfg.learner_upstream_base_url
+    learner_key_env = args.learner_key_env or hcfg.learner_upstream_key_env
+    learner_key = os.environ.get(learner_key_env) if learner_key_env else None
+    if learner_key_env and (not learner_base or not learner_key):
+        print("--learner-key-env requires --learner-base-url and a nonempty environment variable")
+        return 2
+    if not key and (not learner_base or hcfg.domain(args.domain).benchmark != "qfbench"):
         print(f"set {hcfg.upstream_key_env} in .env — this run spends provider credits")
         return 2
     rosetta_warning = _apple_silicon_rosetta_warning()
@@ -98,7 +115,10 @@ def _run(args) -> int:
         res = asyncio.run(evaluate.run_eval(
             hcfg, args.domain, skill_dir=args.skill, out=args.out, arms=arms,
             task_ids=task_ids, limit=args.limit, upstream_base_url=base, upstream_key=key,
-            concurrency=args.concurrency,
+            concurrency=args.concurrency, model=args.model,
+            resume=args.resume, learner_budget_tokens=args.learner_budget_tokens,
+            grader_budget_tokens=args.grader_budget_tokens,
+            learner_base_url=learner_base, learner_key=learner_key,
         ))
     except (ValueError, RuntimeError) as e:
         print(e)

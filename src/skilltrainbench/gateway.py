@@ -24,6 +24,7 @@ import threading
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import httpx
 import uvicorn
@@ -166,14 +167,29 @@ def _percentile(values: list[float], q: float) -> float | None:
 class Ledger:
     """One row per gateway call: the budget decision and timing, never content."""
 
-    def __init__(self) -> None:
-        self._entries: list[dict] = []
+    def __init__(self, path: Path | None = None) -> None:
+        self._path = path
+        self._entries: list[dict] = ([json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+                                    if path is not None and path.exists() else [])
         self._lock = threading.Lock()
 
     def record(self, entry: dict, *, tags: dict | None = None) -> None:
         tag = _current_tag.get()
         with self._lock:
-            self._entries.append({"seq": len(self._entries), **entry, **(tag or {}), **(tags or {})})
+            row = {"seq": len(self._entries), **entry, **(tag or {}), **(tags or {})}
+            if self._path is not None:
+                with self._path.open("a", encoding="utf-8") as file:
+                    file.write(json.dumps(row, separators=(",", ":")) + "\n")
+            self._entries.append(row)
+
+    def usage(self) -> dict:
+        """Cumulative usage, including reservations charged for missing usage."""
+        rows = self.entries
+        prompt = sum(int(row.get("prompt_tokens", 0)) for row in rows)
+        total = sum(int(row.get("charged_tokens", 0)) for row in rows)
+        return {"prompt_tokens": prompt, "completion_tokens": total - prompt,
+                "cached_tokens": sum(int(row.get("cached_tokens", 0)) for row in rows),
+                "total_tokens": total}
 
     @property
     def entries(self) -> list[dict]:
@@ -308,13 +324,29 @@ async def fetch_prices(client: httpx.AsyncClient) -> dict[str, dict]:
             if isinstance(m, dict) and isinstance(m.get("id"), str) and isinstance(m.get("pricing"), dict)}
 
 
+def learner_request_options(model: str | None) -> dict[str, str]:
+    """Model-specific compatibility settings, applied only by the learner gateway.
+
+    Harbor's pinned OpenHands SDK runner does not forward reasoning_effort.
+    Luna requires reasoning disabled for chat-completion tool calls, and the
+    newer completion-token limit parameter. The local Qwen alias also disables
+    thinking but uses max_tokens. Keep other models unchanged.
+    """
+    if model and model.removeprefix("openai/") == "openai-gpt-5-6-luna":
+        return {"reasoning_effort": "none", "token_limit_parameter": "max_completion_tokens"}
+    if model and model.removeprefix("openai/") == "qwen3-stbench:8b":
+        return {"reasoning_effort": "none", "token_limit_parameter": "max_tokens"}
+    return {}
+
+
 def build_app(meter: BudgetMeter, *, client: httpx.AsyncClient, ledger: Ledger | None = None,
               virtual_key: str | None = None, attempt_registry: AttemptTagRegistry | None = None,
-              prices: dict[str, dict] | None = None) -> FastAPI:
+              prices: dict[str, dict] | None = None, learner_model: str | None = None) -> FastAPI:
     """`client` is the upstream (provider) client, carrying the provider key.
     `prices` maps model id -> per-token USD (`pricing` from /v1/models), for cost reporting."""
     app = FastAPI()
     prices = prices or {}
+    request_options = learner_request_options(learner_model)
     app.state.budget_rejected = False
 
     def _auth_ok(request: Request) -> bool:
@@ -343,6 +375,10 @@ def build_app(meter: BudgetMeter, *, client: httpx.AsyncClient, ledger: Ledger |
         payload = await request.json()
         tags = attempt_registry.resolve(request.headers.get("x-stbench-attempt")) if attempt_registry else {}
         model = payload.get("model")
+        # LiteLLM strips its openai/ routing prefix before sending the request.
+        options = request_options if model == (learner_model or "").removeprefix("openai/") else {}
+        if "reasoning_effort" in options:
+            payload["reasoning_effort"] = options["reasoning_effort"]
         price = prices.get(model) if isinstance(model, str) else None
         requested = int(payload.get("max_tokens") or payload.get("max_completion_tokens")
                         or payload.get("max_output_tokens") or DEFAULT_MAX_OUT)
@@ -391,8 +427,12 @@ def build_app(meter: BudgetMeter, *, client: httpx.AsyncClient, ledger: Ledger |
         max_out = min(requested, avail - prompt_est - MARGIN)
         if max_out <= 0:
             return _reject("insufficient budget for request")
-        payload["max_tokens"] = max_out
-        payload.pop("max_completion_tokens", None)
+        # Preserve the caller's token-limit dialect: newer OpenAI models reject
+        # max_tokens, while existing learners use it.
+        token_limit_key = "max_completion_tokens" if "max_completion_tokens" in payload else "max_tokens"
+        token_limit_key = options.get("token_limit_parameter", token_limit_key)
+        payload[token_limit_key] = max_out
+        payload.pop("max_tokens" if token_limit_key == "max_completion_tokens" else "max_completion_tokens", None)
         try:
             res = meter.reserve(prompt_est + max_out)
         except BudgetExceeded:

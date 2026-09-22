@@ -1,0 +1,3 @@
+FROM qwen3:8b
+PARAMETER num_ctx 20480
+PARAMETER num_batch 128

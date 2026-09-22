@@ -45,6 +45,8 @@ class HackathonCfg:
     upstream_key_env: str
     max_total_bytes: int
     max_files: int
+    learner_upstream_base_url: str | None = None
+    learner_upstream_key_env: str | None = None
     domains: dict[str, DomainCfg] = field(default_factory=dict)
 
     def domain(self, name: str) -> DomainCfg:
@@ -99,6 +101,8 @@ def load_config(path: str | Path | None = None) -> HackathonCfg:
         upstream_key_env=upstream.get("key_env", "STBENCH_UPSTREAM_KEY"),
         max_total_bytes=int(submission.get("max_total_bytes", 1_000_000)),
         max_files=int(submission.get("max_files", 200)),
+        learner_upstream_base_url=(data.get("learner_upstream") or {}).get("base_url"),
+        learner_upstream_key_env=(data.get("learner_upstream") or {}).get("key_env"),
         domains=domains,
     )
 
@@ -222,4 +226,3 @@ def check_skill(skill_dir: str | Path, cfg: HackathonCfg) -> dict:
         for hit in sorted(set(_EXTERNAL.findall(text)))[:3]:
             warnings.append(f"{p.relative_to(d).as_posix()}: external endpoint or credential reference {hit!r}")
     return {"ok": not errors, "errors": errors, "warnings": warnings, "n_files": len(files), "total_bytes": total}
-

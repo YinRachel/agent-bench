@@ -235,6 +235,11 @@ def build_command(task: Task, task_dir: Path, *, settings: LearnerSettings, gate
                   staged_skill: Path | None) -> tuple[list[str], dict[str, str]]:
     """The `harbor run` command line and the agent env it passes to the learner."""
     agent = settings.agent
+    harbor_agent = agent
+    if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "openai-gpt-5-6-luna":
+        harbor_agent = "skilltrainbench.openhands_luna:LunaOpenHandsSDK"
+    if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "qwen3-stbench:8b":
+        harbor_agent = "skilltrainbench.openhands_qwen:QwenOpenHandsSDK"
     if agent.startswith("openhands"):
         # OpenHands' OpenAI route appends /chat/completions to its base URL.
         llm_base = _v1(gateway_url)
@@ -255,7 +260,7 @@ def build_command(task: Task, task_dir: Path, *, settings: LearnerSettings, gate
         _harbor_executable(), "run",
         "-p", str(task_dir),
         "-m", model,
-        "-a", agent,
+        "-a", harbor_agent,
         "-e", "docker",
         "-o", str(jobs_dir),
         "--job-name", job_name,

@@ -209,7 +209,7 @@ def _grader_env(task: Task, settings: LearnerSettings, aux_url: str | None, aux_
         "OPENAI_BASE_URL": base,
         "TAU2_USER_MODEL": _litellm(settings.user_model),
         "TAU2_NL_ASSERTIONS_MODEL": _litellm(settings.nl_assertions_model),
-        "TAU2_USER_REASONING_EFFORT": settings.user_reasoning_effort or "low",
+        "TAU2_USER_REASONING_EFFORT": settings.user_reasoning_effort or "",
         "TAU2_USER_TEMPERATURE": "",
         "TAU2_USER_LLM_ARGS_JSON": "",
     }
@@ -243,7 +243,12 @@ def build_command(task: Task, task_dir: Path, *, settings: LearnerSettings, gate
     if agent.startswith("openhands"):
         # OpenHands' OpenAI route appends /chat/completions to its base URL.
         llm_base = _v1(gateway_url)
-        model = settings.model if "/" in settings.model else f"openai/{settings.model}"
+        model = (
+            settings.model
+            if settings.model.startswith("openai/")
+            else f"openai/{settings.model}"
+        )
+
     else:
         llm_base, model = gateway_url.rstrip("/"), settings.model
     agent_env = {

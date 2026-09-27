@@ -42,7 +42,7 @@ class HackathonCfg:
     agent_kwargs: dict
     concurrency: int
     upstream_base_url: str
-    upstream_key_env: str
+    upstream_key_env: str | None
     max_total_bytes: int
     max_files: int
     learner_upstream_base_url: str | None = None
@@ -98,7 +98,7 @@ def load_config(path: str | Path | None = None) -> HackathonCfg:
         agent_kwargs=dict(learner.get("agent_kwargs") or {}),
         concurrency=int(learner.get("concurrency", 4)),
         upstream_base_url=upstream["base_url"].rstrip("/"),
-        upstream_key_env=upstream.get("key_env", "STBENCH_UPSTREAM_KEY"),
+        upstream_key_env=upstream.get("key_env"),
         max_total_bytes=int(submission.get("max_total_bytes", 1_000_000)),
         max_files=int(submission.get("max_files", 200)),
         learner_upstream_base_url=(data.get("learner_upstream") or {}).get("base_url"),

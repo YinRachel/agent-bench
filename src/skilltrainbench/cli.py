@@ -84,17 +84,28 @@ def _run(args) -> int:
         print(e)
         return 2
 
-    base = os.environ.get("STBENCH_UPSTREAM_BASE_URL") or hcfg.upstream_base_url
-    key = os.environ.get("STBENCH_UPSTREAM_KEY") or os.environ.get(hcfg.upstream_key_env)
+    base = hcfg.upstream_base_url
+    key = (
+        os.environ.get(hcfg.upstream_key_env)
+        if hcfg.upstream_key_env
+        else None
+    )
+
     learner_base = args.learner_base_url or hcfg.learner_upstream_base_url
     learner_key_env = args.learner_key_env or hcfg.learner_upstream_key_env
     learner_key = os.environ.get(learner_key_env) if learner_key_env else None
     if learner_key_env and (not learner_base or not learner_key):
         print("--learner-key-env requires --learner-base-url and a nonempty environment variable")
         return 2
-    if not key and (not learner_base or hcfg.domain(args.domain).benchmark != "qfbench"):
-        print(f"set {hcfg.upstream_key_env} in .env — this run spends provider credits")
+
+    needs_upstream = (
+        not learner_base
+        or hcfg.domain(args.domain).benchmark != "qfbench"
+    )
+    if needs_upstream and hcfg.upstream_key_env and not key:
+        print(f"set {hcfg.upstream_key_env} for the configured upstream")
         return 2
+        
     rosetta_warning = _apple_silicon_rosetta_warning()
     if rosetta_warning:
         print(rosetta_warning)

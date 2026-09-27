@@ -149,7 +149,7 @@ def pull_data(cfg: HackathonCfg, *, token: str | None = None) -> Path:
     for n in range(1, attempts + 1):
         try:
             snapshot_download(repo_id=cfg.hf_repo, repo_type="dataset", revision=cfg.hf_revision,
-                              local_dir=str(cfg.data_dir), token=token)
+                              local_dir=str(cfg.data_dir), token=token if token else False)
             break
         except (httpx.TransportError, LocalEntryNotFoundError) as e:
             if n == attempts:

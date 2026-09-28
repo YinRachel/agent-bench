@@ -225,9 +225,9 @@ def attempt_from_trial(task: Task, trial_dir: Path, result: dict) -> dict:
         return {**base, "status": "infra_error", "error_class": "harbor_inconsistent_reward_status"}
     if isinstance(exc, dict) and exc:
         exc_type = str(exc.get("exception_type") or "unknown")
-        if not has_reward and not (task.fractional and status_file == "invalidated"):
-            status = "timeout" if "timeout" in exc_type.lower() else "infra_error"
-            return {**base, "status": status, "error_class": f"harbor_exception:{exc_type}"[:120]}
+        # A verifier reward cannot make a failed agent invocation valid.
+        status = "timeout" if "timeout" in exc_type.lower() else "infra_error"
+        return {**base, "status": status, "error_class": f"harbor_exception:{exc_type}"[:120]}
     if not has_reward and task.fractional:
         if status_file == "invalidated":
             return {**base, "status": "ok", "error_class": None}

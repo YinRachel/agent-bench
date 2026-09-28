@@ -85,6 +85,18 @@ class ResumeTests(unittest.IsolatedAsyncioTestCase):
         self.attempt.assert_not_awaited(); self.prices.assert_not_awaited()
         self.assertEqual(result['summary']['n_tasks'], 2)
 
+    async def test_deepseek_native_protocol_rejects_old_manifest(self):
+        model = 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B'
+        await self.run_eval(model=model)
+        path = self.out / 'run_manifest.json'
+        manifest = json.loads(path.read_text())
+        self.assertEqual(manifest.pop('agent_protocol'), 'openhands-sdk-native-tools-v1')
+        path.write_text(json.dumps(manifest))
+        self.attempt.reset_mock()
+        with self.assertRaisesRegex(ValueError, 'agent protocol'):
+            await self.run_eval(model=model, resume=True)
+        self.attempt.assert_not_awaited()
+
     async def test_local_learner_isolated_from_grader_endpoint_and_credentials(self):
         self.cfg = replace(self.cfg, learner_upstream_base_url='http://configured:11434')
         grader_client, learner_client = MagicMock(), MagicMock()

@@ -82,9 +82,14 @@ def prepare(out: Path, *, cfg, domain, settings, tasks, arms, skill_path, upstre
     }, default=str))
     if learner_base_url is not None:
         manifest["learner_base_url"] = learner_base_url
+    # The earlier DeepSeek adapter changed the tool protocol without changing
+    # LearnerSettings. Never silently resume those results with the stock agent.
+    if (settings.agent == 'openhands-sdk'
+            and settings.model.removeprefix('openai/') == 'deepseek-ai/DeepSeek-R1-Distill-Qwen-32B'):
+        manifest['agent_protocol'] = 'openhands-sdk-native-tools-v1'
     if resume and manifest_path.exists():
         if json.loads(manifest_path.read_text()) != manifest:
-            raise ValueError('resume configuration differs: keep the same tasks, arms, model, grader, dataset and skill')
+            raise ValueError('resume configuration differs: keep the same tasks, arms, model, grader, dataset, skill and agent protocol; use a new output directory after changing protocols')
     elif resume:
         # Older runs predate manifests. Only import the recoverable HealthBench
         # control-arm case; never silently infer the identity of an old skill.

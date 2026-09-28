@@ -51,7 +51,7 @@ class ModelOverrideTests(unittest.TestCase):
             (skill / "SKILL.md").write_text("---\nname: test\ndescription: test\n---\nTest")
             task = Task("test", "test", domain.benchmark, root / "task", 30)
             stack.enter_context(patch("dotenv.load_dotenv"))
-            stack.enter_context(patch.dict("os.environ", {"STBENCH_UPSTREAM_KEY": "test"}))
+            stack.enter_context(patch.dict("os.environ", {cfg.upstream_key_env: "test"}))
             stack.enter_context(patch.object(config, "load_config", return_value=cfg))
             stack.enter_context(patch.object(harbor, "egress_allowlist_supported", return_value=True))
             stack.enter_context(patch.object(evaluate, "task_names", return_value=[task.name]))

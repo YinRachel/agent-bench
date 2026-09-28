@@ -29,7 +29,9 @@ local_dir = "dataset/hackathon"
 [learner]
 
 # Local learner served by vLLM.
-model = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"
+#model = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"'
+
+model = "Qwen/Qwen3-32B"
 
 harbor_agent = "openhands-sdk"
 

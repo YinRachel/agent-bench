@@ -51,14 +51,16 @@ judge requests can use their output budget for grading verdicts. After syncing
 the script to Viking, submit it directly with
 `sbatch scripts/viking/serve.sbatch auxiliary`.
 
-The auxiliary job also defaults `VLLM_USE_DEEP_GEMM=0` and
-`VLLM_MOE_USE_DEEP_GEMM=0`. DeepGEMM's JIT needs a discoverable CUDA toolkit;
-without one, FP8 startup can fail in `deep_jit::CUDA::find_cuda_toolkit`
-with a `home_path` assertion even when the GPU driver works. These defaults
-allow vLLM to select alternative FP8 kernels; performance can differ. To opt
-back in after configuring a compatible toolkit on the compute node, export
-both variables as `1` before submitting. A successful GPU startup still needs
-to be verified on Viking.
+Both roles explicitly disable FlashInfer sampling with
+`VLLM_USE_FLASHINFER_SAMPLER=0`, matching the successful September 28 logs.
+The auxiliary role also disables DeepGEMM with `VLLM_USE_DEEP_GEMM=0` and
+`VLLM_MOE_USE_DEEP_GEMM=0`; this restored CUTLASS FP8 linear layers and Triton
+MoE in the September 29 retry. It selects `--gdn-prefill-backend triton` to
+avoid FlashInfer GDN prefill's nvcc-dependent JIT path. This GDN setting differs
+from the successful run, which used FlashInfer; the logs do not establish why
+that earlier run could use it. No mandatory CUDA toolkit check is imposed.
+These settings address the observed DeepGEMM and FlashInfer compilation paths;
+startup and a completion request must still be verified on Viking.
 
 For `qf` alone only the learner is needed. For `tau3`, launch both. Check each
 log for successful server startup and its allocated node. On your **local

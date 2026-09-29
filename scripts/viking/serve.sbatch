@@ -13,6 +13,8 @@
 set -euo pipefail
 umask 077
 : "${SLURM_JOB_ID:?Submit with sbatch}"
+# Match the sampler setting recorded in both successful Viking runs.
+export VLLM_USE_FLASHINFER_SAMPLER=0
 role=${1:?Usage: sbatch scripts/viking/serve.sbatch learner|auxiliary}
 case "$role" in
     learner)
@@ -25,13 +27,11 @@ case "$role" in
         model=Qwen/Qwen3.5-35B-A3B-FP8
         port=18000
         parser=qwen3_coder
-        # DeepGEMM JIT requires a discoverable CUDA toolkit, which the vLLM
-        # wheel alone does not provide. Use alternative FP8 kernels by default.
-        export VLLM_USE_DEEP_GEMM=${VLLM_USE_DEEP_GEMM:-0}
-        export VLLM_MOE_USE_DEEP_GEMM=${VLLM_MOE_USE_DEEP_GEMM:-0}
-        printf 'DeepGEMM: %s MoE DeepGEMM: %s\n' "$VLLM_USE_DEEP_GEMM" "$VLLM_MOE_USE_DEEP_GEMM"
+        # Restore FP8 backends observed in the successful H100 run.
+        export VLLM_USE_DEEP_GEMM=0
+        export VLLM_MOE_USE_DEEP_GEMM=0
         # Return judge verdicts without spending the output budget on thinking.
-        extra=(--language-model-only --default-chat-template-kwargs '{"enable_thinking": false}')
+        extra=(--language-model-only --gdn-prefill-backend triton --default-chat-template-kwargs '{"enable_thinking": false}')
         ;;
     *) echo 'Role must be learner or auxiliary' >&2; exit 2 ;;
 esac
@@ -47,7 +47,7 @@ echo 'Wait for the vLLM server startup message before opening the SSH tunnel.'
 # Loopback only; reach via SSH to this allocated compute node through Viking.
 exec "$vllm_bin" serve "$model" \
     --host 127.0.0.1 --port "$port" \
-    --tensor-parallel-size 1 --max-model-len 32768 --max-num-seqs 2 \
+    --tensor-parallel-size 1 --max-model-len 32768 --max-num-seqs 1 \
     --gpu-memory-utilization 0.90 \
     --enable-auto-tool-choice --tool-call-parser "$parser" \
     --reasoning-parser qwen3 "${extra[@]}"

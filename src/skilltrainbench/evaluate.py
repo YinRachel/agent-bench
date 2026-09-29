@@ -69,13 +69,14 @@ async def run_eval(cfg: HackathonCfg, domain_name: str, *, skill_dir: str | Path
                    upstream_base_url: str, upstream_key: str | None, concurrency: int | None = None,
                    model: str | None = None, resume: bool = False,
                    learner_budget_tokens: int | None = None, grader_budget_tokens: int | None = None,
-                   learner_base_url: str | None = None, learner_key: str | None = None) -> dict:
+                   learner_base_url: str | None = None, learner_key: str | None = None,
+                   legacy_context: bool = False) -> dict:
     with checkpoint.run_lock(Path(out)):
         return await _run_eval(cfg, domain_name, skill_dir=skill_dir, out=out, arms=arms,
             task_ids=task_ids, limit=limit, upstream_base_url=upstream_base_url, upstream_key=upstream_key,
             concurrency=concurrency, model=model, resume=resume,
             learner_budget_tokens=learner_budget_tokens, grader_budget_tokens=grader_budget_tokens,
-            learner_base_url=learner_base_url, learner_key=learner_key)
+            learner_base_url=learner_base_url, learner_key=learner_key, legacy_context=legacy_context)
 
 
 async def _run_eval(cfg: HackathonCfg, domain_name: str, *, skill_dir: str | Path | None, out: str | Path,
@@ -83,7 +84,8 @@ async def _run_eval(cfg: HackathonCfg, domain_name: str, *, skill_dir: str | Pat
                    upstream_base_url: str, upstream_key: str | None, concurrency: int | None = None,
                    model: str | None = None, resume: bool = False,
                    learner_budget_tokens: int | None = None, grader_budget_tokens: int | None = None,
-                   learner_base_url: str | None = None, learner_key: str | None = None) -> dict:
+                   learner_base_url: str | None = None, learner_key: str | None = None,
+                   legacy_context: bool = False) -> dict:
     domain = cfg.domain(domain_name)
     if learner_base_url is None:
         learner_base_url = cfg.learner_upstream_base_url
@@ -102,6 +104,11 @@ async def _run_eval(cfg: HackathonCfg, domain_name: str, *, skill_dir: str | Pat
     settings = learner_settings(cfg, domain)
     if model is not None:
         settings = replace(settings, model=model)
+    if legacy_context:
+        from .openhands_context import context_policy
+        if not resume or not context_policy(settings.agent, settings.model):
+            raise ValueError("--legacy-context requires --resume with the Qwen3-32B OpenHands learner")
+        settings = replace(settings, legacy_context=True)
     names = task_names(domain, task_ids=task_ids, limit=limit)
     tasks = [load_task(domain.benchmark, domain.dataset_dir, n) for n in names]
     skill_path = Path(skill_dir).resolve() if skill_dir else None
@@ -214,11 +221,14 @@ def _write_result(out, domain, settings, skill_path, arms, names, tasks, complet
                           invalidated=frozenset(arm for arm in arms if by_arm[arm] is None)))
     by_id = {t.id: t.name for t in tasks}
     summary = summarize(list(pairs))
+    from .openhands_context import context_policy
+    policy = context_policy(settings.agent, settings.model, legacy=settings.legacy_context)
     result = {
         "domain": domain.name,
         "benchmark": domain.benchmark,
         "learner": {"model": settings.model, "agent": settings.agent, "agent_kwargs": settings.agent_kwargs,
                     "request_options": learner_request_options(settings.model),
+                    **({"context_policy": policy} if policy else {}),
                     **({"sdk_llm_options": {"api_mode": "chat", "reasoning_effort": "none",
                         **({"max_input_tokens": 16384, "max_output_tokens": 4096, "timeout": 1800}
                            if settings.model.removeprefix("openai/") == "qwen3-stbench:8b" else {})}}

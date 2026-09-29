@@ -34,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
                     help="parallel task containers (default: hackathon.toml; lower it on a laptop for qf/tau3)")
     ev.add_argument("--out", required=True)
     ev.add_argument("--resume", action="store_true", help="reuse completed task/arm pairs in --out")
+    ev.add_argument("--legacy-context", action="store_true",
+                    help="resume an older Qwen3-32B run using its original OpenHands context behavior")
     ev.add_argument("--learner-budget-tokens", type=int, default=None,
                     help="learner token allowance for this invocation (including resumed work)")
     ev.add_argument("--grader-budget-tokens", type=int, default=None,
@@ -127,7 +129,7 @@ def _run(args) -> int:
             hcfg, args.domain, skill_dir=args.skill, out=args.out, arms=arms,
             task_ids=task_ids, limit=args.limit, upstream_base_url=base, upstream_key=key,
             concurrency=args.concurrency, model=args.model,
-            resume=args.resume, learner_budget_tokens=args.learner_budget_tokens,
+            resume=args.resume, legacy_context=args.legacy_context, learner_budget_tokens=args.learner_budget_tokens,
             grader_budget_tokens=args.grader_budget_tokens,
             learner_base_url=learner_base, learner_key=learner_key,
         ))

@@ -59,6 +59,7 @@ class LearnerSettings:
     user_model: str | None = None        # tau3 simulated customer
     nl_assertions_model: str | None = None
     user_reasoning_effort: str | None = None
+    legacy_context: bool = False
 
 
 def default_skills_dir() -> str:
@@ -236,6 +237,9 @@ def build_command(task: Task, task_dir: Path, *, settings: LearnerSettings, gate
     """The `harbor run` command line and the agent env it passes to the learner."""
     agent = settings.agent
     harbor_agent = agent
+    from .openhands_context import context_policy
+    if context_policy(agent, settings.model, legacy=settings.legacy_context):
+        harbor_agent = "skilltrainbench.openhands_context:ContextOpenHandsSDK"
     if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "openai-gpt-5-6-luna":
         harbor_agent = "skilltrainbench.openhands_luna:LunaOpenHandsSDK"
     if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "qwen3-stbench:8b":

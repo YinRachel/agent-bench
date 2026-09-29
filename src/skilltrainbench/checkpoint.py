@@ -75,13 +75,17 @@ def prepare(out: Path, *, cfg, domain, settings, tasks, arms, skill_path, upstre
     for key in ('eval_budget_tokens', 'judge_budget_tokens'):
         domain_settings.pop(key)
     manifest = json.loads(json.dumps({
-        'schema_version': 1, 'domain': domain_settings, 'learner': asdict(settings),
+        'schema_version': 1, 'domain': domain_settings, 'learner': {k: v for k, v in asdict(settings).items() if k != 'legacy_context'},
         'upstream_base_url': upstream_base_url.rstrip('/'), 'arms': sorted(arms),
         'tasks': {task.id: {'name': task.name, 'sha256': tree_digest(task.dir)} for task in tasks},
         'skill_sha256': tree_digest(skill_path) if 'skill' in arms else None,
     }, default=str))
     if learner_base_url is not None:
         manifest["learner_base_url"] = learner_base_url
+    from .openhands_context import context_policy
+    policy = context_policy(settings.agent, settings.model, legacy=settings.legacy_context)
+    if policy:
+        manifest['context_policy'] = policy
     # The earlier DeepSeek adapter changed the tool protocol without changing
     # LearnerSettings. Never silently resume those results with the stock agent.
     if (settings.agent == 'openhands-sdk'

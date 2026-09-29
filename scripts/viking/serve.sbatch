@@ -25,7 +25,8 @@ case "$role" in
         model=Qwen/Qwen3.5-35B-A3B-FP8
         port=18000
         parser=qwen3_coder
-        extra=(--language-model-only)
+        # Return judge verdicts without spending the output budget on thinking.
+        extra=(--language-model-only --default-chat-template-kwargs '{"enable_thinking": false}')
         ;;
     *) echo 'Role must be learner or auxiliary' >&2; exit 2 ;;
 esac

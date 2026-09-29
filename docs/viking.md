@@ -45,6 +45,12 @@ sbatch --job-name=stbench-auxiliary \
 squeue -u "$USER" -o '%.18i %.20j %.8T %.20N'
 ```
 
+The `auxiliary` server disables thinking by default with
+`--default-chat-template-kwargs '{"enable_thinking": false}'`, so HealthBench
+judge requests can use their output budget for grading verdicts. After syncing
+the script to Viking, submit it directly with
+`sbatch scripts/viking/serve.sbatch auxiliary`.
+
 For `qf` alone only the learner is needed. For `tau3`, launch both. Check each
 log for successful server startup and its allocated node. On your **local
 machine**, run these in two terminals, substituting those node names:

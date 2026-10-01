@@ -48,6 +48,6 @@ echo 'Wait for the vLLM server startup message before opening the SSH tunnel.'
 exec "$vllm_bin" serve "$model" \
     --host 127.0.0.1 --port "$port" \
     --tensor-parallel-size 1 --max-model-len 32768 --max-num-seqs 1 \
-    --gpu-memory-utilization 0.90 \
+    --gpu-memory-utilization 0.95 \
     --enable-auto-tool-choice --tool-call-parser "$parser" \
     --reasoning-parser qwen3 "${extra[@]}"

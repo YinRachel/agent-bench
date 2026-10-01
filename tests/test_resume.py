@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from skilltrainbench import checkpoint, config, evaluate, harbor
 from skilltrainbench.gateway import Ledger
-from skilltrainbench.tasks import Task
+from skilltrainbench.tasks import Task, score
 
 
 class ResumeTests(unittest.IsolatedAsyncioTestCase):
@@ -61,6 +61,38 @@ class ResumeTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(RuntimeError, 'budget pool exhausted'):
             await self.run_eval()
         self.attempt.side_effect = None
+
+    async def test_qf_agent_timeout_continues_and_is_not_retried_on_resume(self):
+        self.tasks = [replace(t, benchmark='qfbench') for t in self.tasks]
+        self.stack.enter_context(patch.object(evaluate, 'score', side_effect=score))
+        self.attempt.side_effect = [
+            {'status': 'timeout', 'error_class': 'harbor_exception:AgentTimeoutError'},
+            {'status': 'ok', 'task_id': self.tasks[1].id,
+             'artifacts': {'verifier': {'success': True}}},
+        ]
+        args = dict(skill_dir=None, out=self.out, arms=['baseline'],
+                    upstream_base_url=self.cfg.upstream_base_url, upstream_key='test',
+                    concurrency=1)
+        result = await evaluate.run_eval(self.cfg, 'qf', **args)
+        self.assertEqual(self.attempt.await_count, 2)
+        rows = checkpoint.read_rows(self.out / 'attempts.jsonl')
+        self.assertEqual(rows[0]['status'], 'agent_timeout')
+        self.assertEqual(rows[0]['score'], 0.0)
+        self.assertFalse(rows[0]['passed'])
+        self.assertEqual(result['summary']['baseline_rate'], 0.5)
+        self.attempt.reset_mock()
+        await evaluate.run_eval(self.cfg, 'qf', resume=True, **args)
+        self.attempt.assert_not_awaited()
+
+    async def test_qf_verifier_timeout_is_still_an_error(self):
+        self.tasks = [replace(t, benchmark='qfbench') for t in self.tasks]
+        self.attempt.return_value = {'status': 'timeout', 'error_class': 'harbor_exception:VerifierTimeoutError'}
+        with patch.object(evaluate, '_RETRY_DELAYS', (0,)):
+            with self.assertRaisesRegex(RuntimeError, 'runtime_timeout'):
+                await evaluate.run_eval(self.cfg, 'qf', skill_dir=None, out=self.out,
+                    arms=['baseline'], upstream_base_url=self.cfg.upstream_base_url,
+                    upstream_key='test', concurrency=1)
+        self.assertFalse((self.out / 'attempts.jsonl').exists())
 
     async def test_resume_only_missing_pairs_and_merge_summary(self):
         await self.interrupt()

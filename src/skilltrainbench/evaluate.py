@@ -56,6 +56,11 @@ async def _attempt_with_retries(task: Task, skill_dir: Path | None, sem: asyncio
             if registration is not None:
                 registration.__exit__(None, None, None)
         status = attempt.get("status")
+        # Exhausting a QF task's agent wall-clock allowance is a terminal
+        # benchmark outcome, not a transient service failure to retry.
+        if (task.benchmark == "qfbench" and status == "timeout"
+                and attempt.get("error_class") == "harbor_exception:AgentTimeoutError"):
+            return {**attempt, "status": "agent_timeout", "blocked": False, "error": None}
         blocked = status == "budget_exhausted"
         ok_statuses = {"ok", "invalid_output"} if judged else {"ok"}
         error = None if status in ok_statuses or blocked else f"{task.benchmark}_runtime_{status}"
@@ -185,10 +190,13 @@ async def _run_eval(cfg: HackathonCfg, domain_name: str, *, skill_dir: str | Pat
         row = {"task_id": task.id, "task_name": task.name, "arm": arm, "score": value,
                      "passed": None if value is None else is_pass(value), "answer": attempt.get("answer", ""),
                      "status": attempt.get("status"), "trial_dir": attempt.get("artifacts", {}).get("trial_dir")}
+        if attempt.get("status") == "agent_timeout":
+            row["error_class"] = attempt["error_class"]
         checkpoint.append_row(out / "attempts.jsonl", row)
         rows.append(row)
         completed[(task.id, arm)] = row
-        print(f"Completed {len(completed)}/{len(tasks) * len(arms)}: {task.name} [{arm}]", flush=True)
+        suffix = " — agent time limit reached; scored 0, continuing" if row["status"] == "agent_timeout" else ""
+        print(f"Completed {len(completed)}/{len(tasks) * len(arms)}: {task.name} [{arm}]{suffix}", flush=True)
         return value
 
     pending = [asyncio.create_task(_arm(task, arm)) for task in tasks for arm in arms

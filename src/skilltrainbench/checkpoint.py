@@ -126,7 +126,12 @@ def prepare(out: Path, *, cfg, domain, settings, tasks, arms, skill_path, upstre
         key = (row.get('task_id'), row.get('arm'))
         if key not in selected or key in completed:
             raise ValueError('checkpoint has duplicate or unselected task/arm pairs')
-        if row.get('status') not in ('ok', 'invalid_output') or 'score' not in row:
+        if row.get('status') == 'agent_timeout':
+            if (domain.benchmark != 'qfbench' or row.get('score') != 0.0
+                    or row.get('passed') is not False
+                    or row.get('error_class') != 'harbor_exception:AgentTimeoutError'):
+                raise ValueError('checkpoint contains an invalid agent timeout')
+        if row.get('status') not in ('ok', 'invalid_output', 'agent_timeout') or 'score' not in row:
             raise ValueError('checkpoint contains an incomplete attempt')
         completed[key] = row
     # Validate both ledgers before writing anything to the checkpoint directory.

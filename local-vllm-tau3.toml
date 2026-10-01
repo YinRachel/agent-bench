@@ -1,0 +1,151 @@
+# Local vLLM research configuration.
+#
+# Learner:
+#   DeepSeek-R1-Distill-Qwen-32B
+#   http://127.0.0.1:8001
+#
+# Judge / auxiliary model:
+#   Qwen3.5-35B-A3B-FP8
+#   http://127.0.0.1:8000
+
+schema_version = 1
+
+
+# ============================================================
+# DATA
+# ============================================================
+
+[data]
+
+hf_repo = "armin-aptura/skilltrainbench-public"
+hf_revision = "main"
+local_dir = "dataset/hackathon"
+
+
+# ============================================================
+# LEARNER
+# ============================================================
+
+[learner]
+
+# Local learner served by vLLM.
+#model = "deepseek-ai/DeepSeek-R1-Distill-Qwen-32B"'
+
+model = "Qwen/Qwen3-32B"
+
+harbor_agent = "openhands-sdk"
+
+agent_kwargs = { version = "1.47.0" }
+
+# Start with 1 while validating the local setup.
+# Once everything works, increase to 2 or 4.
+concurrency = 1
+
+
+# Separate local endpoint used ONLY by the learner.
+[learner_upstream]
+
+# Do NOT add /v1 here.
+# The benchmark gateway appends /v1/chat/completions.
+base_url = "http://127.0.0.1:8001"
+
+# No key_env required because the local vLLM learner
+# does not require authentication.
+
+
+# ============================================================
+# JUDGE / AUXILIARY MODEL
+# ============================================================
+
+[upstream]
+
+# Local Qwen judge served by vLLM.
+#
+# This endpoint is used by auxiliary models:
+# - HealthBench rubric judge
+# - tau3 simulated user
+# - tau3 natural-language assertion judge
+#
+# Again, no trailing /v1.
+base_url = "http://127.0.0.1:8002"
+
+# Current stbench code expects an upstream key for domains
+# that use auxiliary models. vLLM itself does not require it,
+# so use a dummy environment variable.
+
+
+# ============================================================
+# SUBMISSION
+# ============================================================
+
+[submission]
+
+max_total_bytes = 1_000_000
+max_files = 200
+
+
+# ============================================================
+# QUANTITATIVE FINANCE
+# ============================================================
+
+[domains.qf]
+
+benchmark = "qfbench"
+dataset_dir = "dataset/hackathon/QuantitativeFinance-Bench/tasks"
+
+max_iterations = 100
+
+eval_budget_tokens = 4_000_000
+
+
+# ============================================================
+# HEALTHBENCH
+# ============================================================
+
+[domains.health]
+
+benchmark = "healthbench"
+dataset_dir = "dataset/hackathon/healthbench/tasks"
+
+# Learner turns per consultation.
+max_iterations = 4
+
+# Local models may occasionally take longer than API models.
+# I would use 600 initially rather than the original 300.
+agent_timeout_s = 600
+
+# Local Qwen judge.
+judge_model = "Qwen/Qwen3.5-35B-A3B-FP8"
+
+# Deterministic / low-variance judging.
+judge_temperature = 0.0
+
+judge_budget_tokens = 2_000_000
+
+eval_budget_tokens = 2_000_000
+
+
+# ============================================================
+# TAU3
+# ============================================================
+
+[domains.tau3]
+
+benchmark = "tau3bench"
+dataset_dir = "dataset/hackathon/tau3-bench/tasks"
+
+max_iterations = 100
+
+# Both auxiliary roles are now handled by your local
+# Qwen server on port 8000.
+user_model = "Qwen/Qwen3.5-35B-A3B-FP8"
+
+nl_assertions_model = "Qwen/Qwen3.5-35B-A3B-FP8"
+
+# This option was originally written for Claude.
+# Better to omit it for Qwen rather than send a
+# provider-specific reasoning-effort option.
+
+judge_budget_tokens = 300_000_000
+
+eval_budget_tokens = 4_000_000

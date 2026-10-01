@@ -240,6 +240,8 @@ def build_command(task: Task, task_dir: Path, *, settings: LearnerSettings, gate
     from .openhands_context import context_policy
     if context_policy(agent, settings.model, legacy=settings.legacy_context):
         harbor_agent = "skilltrainbench.openhands_context:ContextOpenHandsSDK"
+        if task.benchmark == "tau3bench":
+            harbor_agent = "skilltrainbench.openhands_tau3:Tau3ContextOpenHandsSDK"
     if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "openai-gpt-5-6-luna":
         harbor_agent = "skilltrainbench.openhands_luna:LunaOpenHandsSDK"
     if agent == "openhands-sdk" and settings.model.removeprefix("openai/") == "qwen3-stbench:8b":
